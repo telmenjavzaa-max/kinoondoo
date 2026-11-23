@@ -145,6 +145,18 @@ Deno.serve(async (req: Request) => {
       return new Response("SUCCESS", { status: 200, headers: CORS });
     }
 
+    if (url.searchParams.get("capi")) {
+      const token = Deno.env.get("META_CAPI_TOKEN"), pixel = Deno.env.get("META_PIXEL_ID");
+      if (!token || !pixel) return json({ capi: "missing" }, 500);
+      // Туршилтын event (test_event_code-той тул зарын статистикт орохгүй)
+      const r = await fetch(`https://graph.facebook.com/v21.0/${pixel}/events?access_token=${encodeURIComponent(token)}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ test_event_code: "TEST" + new Date().toISOString().slice(0, 10).replace(/-/g, ""), data: [{ event_name: "PageView", event_time: Math.floor(Date.now() / 1000), action_source: "website", event_source_url: Deno.env.get("SITE_URL") || "https://kinoondoo.com/", user_data: { external_id: [await sha256("capi-check")], client_user_agent: "capi-check" } }] }),
+      });
+      const j = await r.json().catch(() => ({}));
+      return json({ capi: r.ok ? "ok" : "error", received: j.events_received ?? null, error: j.error?.message || null }, r.ok ? 200 : 502);
+    }
+
     if (url.searchParams.get("ping")) {
       try { await qpayToken(); return json({ qpay: "ok" }); } catch (e) { return json({ qpay: "error", detail: String((e as Error).message).replace(/Basic \S+/g, "") }, 502); }
     }
