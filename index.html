@@ -231,6 +231,9 @@ dialog::backdrop { background: #000c; backdrop-filter: blur(4px); }
 .plan .price { font-size: 17px; font-weight: 800; color: var(--red); grid-row: span 2; }
 #promoDlg { border-color: #ff2d55; padding: 0; overflow: hidden; }
 @media (max-width: 760px) { .slide.brand .bg { background-size: 112% auto; background-repeat: no-repeat; background-position: 50% 34%; background-color: #06050a; } }
+.sms-btn { background: #ffffff; color: #c8102e; border: 2px solid #ff2d55; font-weight: 800; box-shadow: 0 6px 18px -6px #ff2d5599; }
+.sms-btn:hover { background: #ffe8ee; }
+.sms-btn:disabled { opacity: .6; }
 .promo-top { position: relative; height: 150px; overflow: hidden; background: radial-gradient(120% 90% at 50% 110%, #ff2d5555, transparent 60%), linear-gradient(180deg, #2a0f16, var(--surface)); display: grid; place-items: center; }
 .promo-top .reel { display: flex; gap: 10px; transform: rotate(-6deg); }
 .promo-top .reel img, .promo-top .reel i { width: 72px; aspect-ratio: 2 / 3; border-radius: 8px; object-fit: cover; box-shadow: 0 10px 24px -8px #000; display: block; background: var(--surface-2); }
@@ -475,7 +478,7 @@ footer .fine { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-t
         </label>
         <div style="height:10px"></div>
         <button class="btn primary wide" type="submit" id="pinLoginBtn">Нэвтрэх</button>
-        <button class="btn ghost wide" type="button" id="sendCodeBtn" style="margin-top:8px">Анх удаа эсвэл PIN мартсан бол → SMS код авах</button>
+        <button class="btn wide sms-btn" type="button" id="sendCodeBtn" style="margin-top:8px">📩 Анх удаа эсвэл PIN мартсан бол → SMS код авах</button>
       </form>
       <form id="codeForm" novalidate hidden>
         <label for="code">SMS-ээр ирсэн 6 оронтой код
