@@ -1157,7 +1157,7 @@ footer .fine { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-t
       if (busy || hasSub || dl || !PAY || !subPlans().length) return;
       try { sessionStorage.setItem("ko.plansShown", "1"); } catch {}
       const rent = rentPlan();
-      const pics = state.movies.filter((m) => m.poster_url && m.has_video && !isAdult(m)).slice(0, 3);
+      const pics = state.movies.filter((m) => m.poster_url && !isAdult(m)).sort((a, b) => (b.has_video === true) - (a.has_video === true) || (b.featured === true) - (a.featured === true)).slice(0, 3);
       $("#promoArt").innerHTML = `<div class="reel">${pics.map((m) => `<img src="${esc(m.poster_url)}" alt="">`).join("") || "<i></i><i></i><i></i>"}</div>`;
       $("#promoList").innerHTML = [...subPlans()].sort((a, b) => b.hours - a.hours).map((p) => `<div><span>${esc(p.title)}</span><span>${p.old_amount ? `<s>${fmt(p.old_amount)}</s>` : ""}<b>${fmt(p.amount)}</b></span></div>`).join("")
         + (rent ? `<div><span>Нэг кино · ${rent.hours} цаг</span><b>${fmt(rent.amount)}-с</b></div>` : "");
