@@ -4,7 +4,6 @@
 // GET/POST ?callback=1&payment_id=...                         → QPay-ийн callback
 // Нууц тохиргоо (Supabase → Edge Functions → Secrets):
 //   QPAY_USERNAME, QPAY_PASSWORD, QPAY_INVOICE_CODE, (сонголттой) QPAY_BASE_URL
-//   QPAY2_USERNAME, QPAY2_PASSWORD, QPAY2_INVOICE_CODE
 
 const SB_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -49,7 +48,6 @@ async function currentUser(req: Request) {
 // Token-ийг дахин ашиглана (QPay: хүчинтэй token байхад шинээр бүү ав)
 const cachedBy: Record<number, { token: string; exp: number } | null> = { 1: null, 2: null };
 const env2 = (acct: number, name: string) => Deno.env.get((acct === 2 ? "QPAY2_" : "QPAY_") + name);
-const qpay2Enabled = () => !!(env2(2, "USERNAME") && env2(2, "PASSWORD") && env2(2, "INVOICE_CODE"));
 async function qpayToken(acct = 1) {
   const cached = cachedBy[acct];
   if (cached && Date.now() < cached.exp) return cached.token;
@@ -109,7 +107,7 @@ async function sendCapiPurchase(paymentId: string) {
 
 // QPay-ээс төлбөрийг шалгаж, төлөгдсөн бол эрх олгоно
 async function verifyAndGrant(payment: { id: string; amount: number; status: string; qpay_invoice_id: string | null; qpay_account?: number | null }) {
-  const acct = payment.qpay_account === 2 ? 2 : 1;
+  const acct = 1;
   if (payment.status === "paid") return "paid";
   if (!payment.qpay_invoice_id) return payment.status;
   const token = await qpayToken(acct);
@@ -124,7 +122,7 @@ async function verifyAndGrant(payment: { id: string; amount: number; status: str
   const paid = Math.max(paidSum, Number(res?.paid_amount || 0));
   if (paidRows.length && paid >= payment.amount) {
     const granted = await db("rpc/grant_payment", { method: "POST", body: JSON.stringify({ p_payment: payment.id }) });
-    if (granted === true && acct !== 2) await sendCapiPurchase(payment.id).catch((e) => console.error("capi", e));
+    if (granted === true) await sendCapiPurchase(payment.id).catch((e) => console.error("capi", e));
     return "paid";
   }
   return "pending";
@@ -141,7 +139,7 @@ Deno.serve(async (req: Request) => {
     if (url.searchParams.get("callback")) {
       const id = url.searchParams.get("payment_id") || "";
       if (/^[0-9a-f-]{36}$/i.test(id)) {
-        const [p] = await db(`payments?id=eq.${id}&select=id,amount,status,qpay_invoice_id,qpay_account`);
+        const [p] = await db(`payments?id=eq.${id}&select=id,amount,status,qpay_invoice_id`);
         if (p) await verifyAndGrant(p);
       }
       return new Response("SUCCESS", { status: 200, headers: CORS });
@@ -175,15 +173,11 @@ Deno.serve(async (req: Request) => {
         description = `Kinoondoo — ${movie.title} (${plan.hours} цаг)`;
       }
 
-      let acct = 1;
-      if (qpay2Enabled() && new Date(user.created_at).getTime() >= Date.parse("2026-11-17T20:58:00+08:00")) {
-        const admin = await fetch(`${SB_URL}/rest/v1/rpc/is_admin`, { method: "POST", headers: { apikey: ANON, Authorization: req.headers.get("Authorization") || "", "Content-Type": "application/json" }, body: "{}" }).then((r) => r.ok ? r.json() : true).catch(() => true);
-        if (admin !== true) acct = await db("rpc/next_qpay_account", { method: "POST", body: "{}" }).then((v) => (v === 2 ? 2 : 1)).catch(() => 1);
-      }
+      const acct = 1; // зөвхөн захиалагчийн нэг QPay merchant
       const [payment] = await db("payments", {
         method: "POST",
         body: JSON.stringify({
-          user_id: user.id, plan_code: planCode, movie_id: movieId, amount, qpay_account: acct,
+          user_id: user.id, plan_code: planCode, movie_id: movieId, amount,
           fbp: /^fb\.\d\.\d+\.\d+$/.test(String(body.fbp || "")) ? body.fbp : null,
           fbc: /^fb\.\d\.\d+\.[\w-]{1,500}$/.test(String(body.fbc || "")) ? body.fbc : null,
           client_ua: (req.headers.get("user-agent") || "").slice(0, 400) || null,
@@ -191,7 +185,6 @@ Deno.serve(async (req: Request) => {
       });
 
       const invoiceCode = env2(acct, "INVOICE_CODE")?.trim();
-      if (acct === 2) description = "MB-" + String(parseInt(payment.id.replace(/-/g, "").slice(0, 8), 16) % 10000).padStart(4, "0");
       if (!invoiceCode) throw new Error("QPAY_INVOICE_CODE тохируулаагүй байна");
       const token = await qpayToken(acct);
       const inv = await qpay("/v2/invoice", token, {
@@ -212,7 +205,6 @@ Deno.serve(async (req: Request) => {
         payment_id: payment.id,
         amount,
         description,
-        hidden: acct === 2,
         qr_image: inv.qr_image || null,
         qr_text: inv.qr_text || null,
         short_url: inv.qPay_shortUrl || null,
@@ -226,7 +218,7 @@ Deno.serve(async (req: Request) => {
     if (body.action === "check") {
       const id = String(body.payment_id || "");
       if (!/^[0-9a-f-]{36}$/i.test(id)) return json({ error: "payment_id" }, 400);
-      const [p] = await db(`payments?id=eq.${id}&user_id=eq.${user.id}&select=id,amount,status,qpay_invoice_id,qpay_account`);
+      const [p] = await db(`payments?id=eq.${id}&user_id=eq.${user.id}&select=id,amount,status,qpay_invoice_id`);
       if (!p) return json({ error: "Төлбөр олдсонгүй" }, 404);
       if (p.status === "paid") return json({ status: "paid" });
       const last = lastCheck.get(id) || 0;
