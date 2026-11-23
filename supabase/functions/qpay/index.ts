@@ -86,7 +86,7 @@ const sha256 = async (v: string) => Array.from(new Uint8Array(await crypto.subtl
 async function sendCapiPurchase(paymentId: string) {
   const token = Deno.env.get("META_CAPI_TOKEN");
   const pixel = Deno.env.get("META_PIXEL_ID") || "";
-  if (!token) return;
+  if (!token || !pixel) return;
   const [p] = await db(`payments?id=eq.${paymentId}&select=id,user_id,amount,plan_code,movie_id,paid_at,fbp,fbc,client_ua`);
   if (!p) return;
   // Хувийн мэдээлэл (имэйл, утас) илгээхгүй — зөвхөн кодолсон дотоод ID + Facebook cookie
@@ -96,7 +96,7 @@ async function sendCapiPurchase(paymentId: string) {
   if (p.client_ua) ud.client_user_agent = p.client_ua;
   const body = { data: [{
     event_name: "Purchase", event_time: Math.floor(new Date(p.paid_at || Date.now()).getTime() / 1000), event_id: p.id,
-    action_source: "website", event_source_url: "https://kinoondoo.mn/", user_data: ud,
+    action_source: "website", event_source_url: Deno.env.get("SITE_URL") || "https://kinoondoo.com/", user_data: ud,
     custom_data: { currency: "MNT", value: Number(p.amount) || 0, content_ids: [p.movie_id ? String(p.movie_id) : p.plan_code], content_type: "product" },
   }] };
   const r = await fetch(`https://graph.facebook.com/v21.0/${pixel}/events?access_token=${encodeURIComponent(token)}`, {
@@ -106,7 +106,7 @@ async function sendCapiPurchase(paymentId: string) {
 }
 
 // QPay-ээс төлбөрийг шалгаж, төлөгдсөн бол эрх олгоно
-async function verifyAndGrant(payment: { id: string; amount: number; status: string; qpay_invoice_id: string | null; qpay_account?: number | null }) {
+async function verifyAndGrant(payment: { id: string; amount: number; status: string; qpay_invoice_id: string | null }) {
   const acct = 1;
   if (payment.status === "paid") return "paid";
   if (!payment.qpay_invoice_id) return payment.status;
